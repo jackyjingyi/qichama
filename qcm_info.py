@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*- 
 import time
+import os
 import requests
 import logging
 from lxml import etree
@@ -10,8 +11,10 @@ from uuid import uuid4
 from queue import Queue
 from collections import defaultdict
 import openpyxl
-
+from copy import deepcopy
 from store_ref import TreeList
+import datetime
+from datetime import datetime
 
 url_front = "https://www.qichamao.com"
 pipe = Queue()
@@ -156,6 +159,18 @@ class Company:
 	def investment(self, invest):
 		self._investment.append(invest)
 
+	@classmethod
+	def __iter__(cls):
+		for i in cls.instances:
+			yield i
+
+	@classmethod
+	def get_root_company(cls):
+		k = cls.__iter__()
+		for c in k:
+			if c.is_root():
+				return c
+
 	def __repr__(self):
 		return "{} {} {} {}".format(self.level, self.name, self.url, self.key)
 
@@ -245,7 +260,6 @@ class Company:
 				new_nartrual_person.add_investment_company(key=self, val=_inv_temp)
 				self.shareholders = {new_nartrual_person: _inv_temp}
 				self.add_child(new_nartrual_person)
-
 			elif boss_title == legal_person_key:
 				if boss_url not in self.__class__.url:
 					# not in queue
@@ -318,7 +332,6 @@ def get_cookies():
 
 
 def worker(queue, level):
-
 	while not queue.empty():
 		try:
 			current_company = queue.get()
@@ -331,7 +344,6 @@ def worker(queue, level):
 					current_company.get_basic_info()
 					current_company.get_shareholders(queue)
 					current_company.get_investments(queue)
-
 				else:
 					continue
 			elif isinstance(current_company, str):
@@ -339,6 +351,78 @@ def worker(queue, level):
 				logging.info("waiting 1 secs")
 		except:
 			continue
+
+
+def write_to_excel(level):
+	"""
+	1. init work book
+	2. sheet1 = > company basic info cols = [ company key, company name , company level, other basic info]
+		sheet2 => company shareholders  cols = [parent company key, parent company name, parent company level +1,shareholder name other info]
+		sheet3 => company investments   cols = [parent company key,  parent company name, parent company level +1,other investment info]
+		Note, no NaturalPerson required.
+	:return: rootcompanyname+timestamp.xlsx
+	"""
+	company = Company.get_root_company()
+	wb = openpyxl.Workbook()
+	ws1 = wb.create_sheet("Company Basic Info", 0)
+	ws2 = wb.create_sheet("Shareholders", 1)
+	ws3 = wb.create_sheet("Investments", 2)
+	cols1 = ['id', '层级', '法定代表人', '名称', '纳税人识别号', '机构代码', '注册号', '注册资本', '统一社会信用代码', '登记机关', '经营状态', '成立日期',
+			 '企业类型', '经营期限', '所属地区', '核准日期', '企业地址', '经营范围', 'url']
+	cols2 = ['母公司id', '母公司名称', '名称', '层级', '认缴', '持股比例', '实缴']
+	cols3 = ['母公司id', '母公司名称', '名称', '层级', '被投资企业名称', '被投资法定代表人', '注册资本', '出资比例', '注册时间', '状态']
+	ws1.append(cols1)
+	ws2.append(cols2)
+	ws3.append(cols3)
+	_temp = Queue()
+	_temp.put(company)
+
+	while not _temp.empty():
+
+		_current = _temp.get()
+		if _current.level > level:
+			break
+		for child in _current.children:
+			if isinstance(child, Company):
+				_temp.put(child)
+		# try:
+		try:
+			_bas1_list = []
+			_bas1_list.append(_current.key)
+			_bas1_list.append(str(_current.level))
+			for i in cols1[2:-1]:
+				_bas1_list.append(_current.basic_info[i])
+			_bas1_list.append(_current.url)
+			ws1.append(_bas1_list)
+			_shares = deepcopy(_current.shareholders)
+			for item in _shares:
+				_item_info = []
+				_item_info.append(_current.key)
+				_item_info.append(_current.name)
+				_item_info.append(list(item.keys())[0].name)
+				_item_info.append(str(list(item.keys())[0].level))
+				_item_info.append(list(item.values())[0]['认缴'])
+				_item_info.append(list(item.values())[0]['持股比例'])
+				_item_info.append(list(item.values())[0]['实缴'])
+				ws2.append(_item_info)
+			_inves = deepcopy(_current.investment)
+			for item in _inves:
+				_item_info2 = []
+				_item_info2.append(_current.key)
+				_item_info2.append(_current.name)
+				_item_info2.append(list(item.keys())[0].name)
+				_item_info2.append(str(list(item.keys())[0].level))
+				for i in cols3[4:]:
+					_item_info2.append(list(item.values())[0][i])
+				ws3.append(_item_info2)
+		except:
+			if _current.level > level:
+				break
+			else:
+				continue
+	name = company.name + "_" + datetime.now().strftime("%Y%m%d%H%M%S") + ".xlsx"
+	wb.save(name)
+	os.startfile(name)
 
 
 if __name__ == "__main__":
@@ -366,7 +450,6 @@ if __name__ == "__main__":
 		assert root_company.is_root()
 		from tkinter import ttk
 		from tkinter import *
-
 		root = Tk()
 		tree = TreeList(root)
 		tree.generate_tree(root_node=root_company)
@@ -378,6 +461,5 @@ if __name__ == "__main__":
 		root.grid_columnconfigure(0, weight=1)
 		root.columnconfigure(0, weight=1)
 		root.mainloop()
-
 	except IOError as err:
 		print('File error: ' + str(err))

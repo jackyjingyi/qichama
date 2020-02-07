@@ -7,7 +7,7 @@ import openpyxl
 from queue import Queue
 from collections import defaultdict
 from store_ref import BasicInfo, Shareholders, Investment, TreeList
-from qcm_info import Company, NaturalPerson, get_cookies, worker
+from qcm_info import Company, NaturalPerson, get_cookies, worker, write_to_excel
 import threading
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
@@ -127,6 +127,7 @@ class MainScreen:
 			return root_company
 
 		root_company = process_work(pipe, self.url_string.get(), int(self.level_string.get()), 8)
+		write_to_excel(int(self.level_string.get()))
 		self.tree.generate_tree(root_node=root_company)
 		self.tree.show()
 		self.current_company.set(root_company.key)

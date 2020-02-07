@@ -187,13 +187,17 @@ class BasicInfo(ttk.Frame):
 		self.spans[text_span_name] = entry1
 
 	def set_info(self, d):
+
 		for k, v in d.items():
-			_k = self.spans[k]
-			if isinstance(_k, StringVar):
-				_k.set(v)
-			elif isinstance(_k, Text):
-				_k.delete(1.0, END)
-				_k.insert("insert", v)
+			try:
+				_k = self.spans[k]
+				if isinstance(_k, StringVar):
+					_k.set(v)
+				elif isinstance(_k, Text):
+					_k.delete(1.0, END)
+					_k.insert("insert", v)
+			except KeyError as e:
+				logging.warning(e)
 
 
 
